@@ -1,0 +1,204 @@
+//
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+//
+/// \file RunAction.cc
+/// \brief Implementation of the B1::RunAction class
+
+#include "RunAction.hh"
+#include "PrimaryGeneratorAction.hh"
+#include "DetectorConstruction.hh"
+// #include "Run.hh"
+
+#include "G4RunManager.hh"
+#include "G4Run.hh"
+#include "G4AccumulableManager.hh"
+#include "G4LogicalVolumeStore.hh"
+#include "G4LogicalVolume.hh"
+#include "G4UnitsTable.hh"
+#include "G4SystemOfUnits.hh"
+
+#include<iostream>
+#include<fstream>
+
+//namespace B1
+//{
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+RunAction::RunAction(DetectorConstruction* detectorConstruction)
+: fDetConstruction(detectorConstruction)
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+RunAction::~RunAction()
+{}
+
+
+void RunAction::SetFilename(int l, std::string dettype)
+{}
+
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void RunAction::BeginOfRunAction(const G4Run*)
+{
+  fEdepSinti = 0.;
+  fAverageEdep = 0.;
+  fSigmaEdep = 0.;
+  Average_Time_r.clear();
+  Average_Time_l.clear();
+  Sigma_Time_r.clear();
+  Sigma_Time_l.clear();
+  hit_pmt_r.clear();
+  hit_pmt_l.clear();
+  noofscintillation.clear();
+  hit_time_r.clear();
+  hit_time_l.clear();
+
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void RunAction::EndOfRunAction(const G4Run* run)
+{
+  G4int nofEvents = run->GetNumberOfEvent();
+  if (nofEvents == 0) return;
+
+  G4double pmt_r = 0.;
+  G4double pmt_l = 0.;
+  G4double scintillation = 0.;
+  double pmt_r2[nofEvents];
+  double pmt_l2[nofEvents];
+  double scintillation2[nofEvents];
+  int num = 0;
+  for (const auto& i : hit_pmt_r){
+    pmt_r += i;
+    pmt_r2[num] = (double)i;
+    num++;
+  }
+  num = 0;
+  for (const auto& ii : hit_pmt_l){
+    pmt_l += ii;
+    pmt_l2[num] = (double)ii;
+    num++;
+  }
+  num = 0;
+  for (const auto& iii : noofscintillation){
+    scintillation += iii;
+    scintillation2[num] = (double)iii;
+    num++;
+  }
+  G4cout << "pmt_r : " << pmt_r/nofEvents <<G4endl;
+  G4cout << "pmt_l : " << pmt_l/nofEvents <<G4endl;
+  G4cout << "scintillation : " << scintillation/nofEvents << G4endl;
+  G4cout << "pmt_r ratio : " << pmt_r*100/scintillation << "%" << G4endl;
+  G4cout << "pmt_l ratio : " << pmt_l*100/scintillation << "%" << G4endl;
+
+  int i=0;
+  G4double lg_length;
+  G4String det_type;
+  
+  lg_length = fDetConstruction->LightGuideLength;
+  det_type = fDetConstruction->scinti_type;
+
+  G4cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << G4endl
+  << "a " << lg_length << " a " << det_type << " a" << G4endl
+  << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << G4endl;
+
+  std::string dir = "data20";
+  filename_r = "../"+ dir +"/time_r_" + std::to_string((int)lg_length) + "_" + (std::string)det_type + ".dat";
+  filename_l = "../"+ dir +"/time_l_" + std::to_string((int)lg_length) + "_" + (std::string)det_type + ".dat";
+  filename_s = "../"+ dir +"/nofdet_" + std::to_string((int)lg_length) + "_" + (std::string)det_type + ".dat";
+  filename_resor = "../"+ dir +"/reso_r" + std::to_string((int)lg_length) + "_" + (std::string)det_type + ".dat";
+  filename_resol = "../"+ dir +"/reso_l" + std::to_string((int)lg_length) + "_" + (std::string)det_type + ".dat";
+
+  std::ofstream ofile_r(filename_r.c_str(), std::ios::app);
+  std::ofstream ofile_l(filename_l.c_str(), std::ios::app);
+  std::ofstream ofile_s(filename_s.c_str(), std::ios::app);
+  std::ofstream ofile_resor(filename_resor.c_str(), std::ios::app);
+  std::ofstream ofile_resol(filename_resol.c_str(), std::ios::app);
+  for (const auto& t : hit_time_r)
+  {
+    ofile_r << i << " " << t << std::endl;
+    i++;
+  }
+  i = 0;
+  for (const auto& tt : hit_time_l)
+  {
+    ofile_l << i << " " << tt << std::endl;
+    i++;
+  }
+  auto ttt0 = noofscintillation.begin();
+  auto ttt1 = hit_pmt_r.begin();
+  auto ttt2 = hit_pmt_l.begin();
+  for (int ttt = 0; ttt < nofEvents; ttt++)
+  {
+    ofile_s << ttt << " " << *ttt0 << " " << *ttt1 << " " << *ttt2 << std::endl;
+    ttt0++;
+    ttt1++;
+    ttt2++;
+  }
+  i = 0;
+  for(int t4 = 0; t4 < nofEvents; t4++){
+    ofile_resor << i;
+    ofile_resol << i;
+    for (int t5 = 0; t5 < hit_res_r.at(0).size(); t5++){
+      ofile_resor << " " <<  hit_res_r.at(i).at(t5);
+      ofile_resol << " " <<  hit_res_l.at(i).at(t5);
+    }
+    ofile_resor << std::endl;
+    ofile_resol << std::endl;
+    i++;
+  }
+  
+
+  
+  // Print
+  //
+  if (IsMaster()) {
+    G4cout
+     << G4endl
+     << "--------------------End of Global Run-----------------------" << G4endl;
+  }
+  else {
+    G4cout
+     << G4endl
+     << "--------------------End of Local Run------------------------" << G4endl;
+  }
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void RunAction::AddEdep(G4double edep)
+{
+  fEdep  += edep;
+  fEdep2 += edep*edep;
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+//}

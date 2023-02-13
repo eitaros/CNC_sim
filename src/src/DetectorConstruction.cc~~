@@ -1,0 +1,685 @@
+//
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+//
+/// \file DetectorConstruction.cc
+/// \brief Implementation of the B1::DetectorConstruction class
+
+#include "DetectorConstruction.hh"
+
+#include "G4RunManager.hh"
+#include "G4NistManager.hh"
+
+#include "G4Box.hh"
+#include "G4Cons.hh"
+#include "G4Orb.hh"
+#include "G4Sphere.hh"
+#include "G4Trd.hh"
+#include "G4Tubs.hh"
+#include "G4LogicalVolume.hh"
+#include "G4PVPlacement.hh"
+#include "G4SystemOfUnits.hh"
+#include "G4RotationMatrix.hh"
+#include "G4Transform3D.hh"
+
+#include "G4Element.hh"
+#include "G4OpticalSurface.hh"
+#include "G4LogicalSkinSurface.hh"
+#include "G4LogicalBorderSurface.hh"
+
+#define h_Planck CLHEP::h_Planck
+#define c_light CLHEP::c_light
+#define optical_switch 1 //optical=1, no optical=0
+//#define scinti_type 0 // 0:cnc    1:cdh
+#define lg_length 115  //defolt 115
+
+
+//namespace B1
+//{
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+DetectorConstruction::DetectorConstruction()
+  : fphys_lg_r(nullptr),
+    fphys_lg_l(nullptr),
+    fphys_pmt_r(nullptr),
+    fphys_pmt_l(nullptr),
+    fphys_scinti(nullptr)
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+DetectorConstruction::~DetectorConstruction()
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+void DetectorConstruction::CreateMaterials(){
+  
+  auto nistManager = G4NistManager::Instance();
+
+// ------------- Materials -------------
+  G4double a, z, density;
+  
+  G4Element* H  = new G4Element("Hydrogen", "H",  z=  1., a= 1.01*g/mole); 
+  G4Element* C  = new G4Element("Carbon",   "C",  z=  6., a=12.01*g/mole);
+  G4Element* N  = new G4Element("Nitrogen", "N",  z=  7., a=14.01*g/mole); 
+  G4Element* O  = new G4Element("Oxygen",   "C",  z=  8., a=16.00*g/mole); 
+  G4Element* Si = new G4Element("Silicon",  "Si", z= 14., a=28.09*g/mole); 
+//
+  G4int nelements;
+//
+// Vacuum
+//
+  vacuum = new G4Material("Galactic", z=1., a=1.01*g/mole,density= CLHEP::universe_mean_density,
+                           kStateGas, 2.73*kelvin, 3.e-18*pascal);
+//
+// Air
+//
+  air_m = new G4Material    ("Air",   density= 1.29*mg/cm3, nelements=2);
+  air_m  ->AddElement(N, 70.*perCent);
+  air_m  ->AddElement(O, 30.*perCent);
+//
+// Scinti. (Bc408)
+//
+  scinti_m = nistManager->FindOrBuildMaterial("G4_PLASTIC_SC_VINYLTOLUENE");
+
+//
+// Lightguides
+//
+  lg_m = new G4Material("LightguidesMaterial" , 1.19*g/cm3, nelements=3) ; 
+  lg_m->AddElement(C, 5);
+  lg_m->AddElement(H, 8);
+  lg_m->AddElement(O, 2);
+//
+// PMT
+//
+  pmt_m = new G4Material("Quartz", density=2.64 *g/cm3, 2);
+  pmt_m-> AddElement(Si, 1);
+  pmt_m-> AddElement(O,  2);  
+}
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+void DetectorConstruction::SetMaterialProperties_Air()
+{
+//========================
+// Air
+//========================
+//
+  G4double photonEnergy[] =
+            { 2.034*eV, 2.068*eV, 2.103*eV, 2.139*eV,
+              2.177*eV, 2.216*eV, 2.256*eV, 2.298*eV,
+              2.341*eV, 2.386*eV, 2.433*eV, 2.481*eV,
+              2.532*eV, 2.585*eV, 2.640*eV, 2.697*eV,
+              2.757*eV, 2.820*eV, 2.885*eV, 2.954*eV,
+              3.026*eV, 3.102*eV, 3.181*eV, 3.265*eV,
+              3.353*eV, 3.446*eV, 3.545*eV, 3.649*eV,
+              3.760*eV, 3.877*eV, 4.002*eV, 4.136*eV };
+  const G4int nEntries = sizeof(photonEnergy)/sizeof(G4double);
+
+  G4double refractiveIndex2[] =
+            { 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00,
+              1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00,
+              1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00,
+              1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00,
+              1.00, 1.00, 1.00, 1.00 };
+
+  G4MaterialPropertiesTable* myMPT = new G4MaterialPropertiesTable();
+  myMPT->AddProperty("RINDEX", photonEnergy, refractiveIndex2, nEntries);
+
+  G4cout << "==================================================" << G4endl;
+  G4cout << "Air G4MaterialPropertiesTable created" << G4endl;
+  myMPT->DumpTable();
+  G4cout << "==================================================" << G4endl;
+
+  air_m->SetMaterialPropertiesTable(myMPT);
+}
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+void DetectorConstruction::SetMaterialProperties_Bc408()
+{
+//======================
+// BC408
+//======================
+  const G4int NUMENTRIES = 46;
+  G4double PhotonEnergy[NUMENTRIES] = {
+    2.40675006*eV,  2.445105532*eV, 2.488158883*eV, 2.522044473*eV, 2.555653572*eV,
+    2.588921153*eV, 2.603982726*eV, 2.6346434*eV,   2.656802618*eV, 2.667359638*eV,
+    2.696833226*eV, 2.709078112*eV, 2.722809302*eV, 2.745084471*eV, 2.762023812*eV,
+    2.795087475*eV, 2.806774486*eV, 2.81855964*eV,  2.831937605*eV, 2.843935469*eV,
+    2.863654459*eV, 2.888297428*eV, 2.905489513*eV, 2.921289742*eV, 2.938878028*eV,
+    2.953425474*eV, 2.969759939*eV, 2.976340141*eV, 2.98627609*eV,  2.996271359*eV,
+    3.011394009*eV, 3.019858358*eV, 3.030087486*eV, 3.038657397*eV, 3.050740039*eV,
+    3.06117225*eV,  3.073442588*eV, 3.084030912*eV, 3.107225739*eV, 3.12531095*eV,
+    3.154686087*eV, 3.195988284*eV, 3.234491656*eV, 3.265965379*eV, 3.326666918*eV,
+    3.413361452*eV };
+      
+  G4double SCINTILLATION_Bc408[NUMENTRIES] = {
+    0.0300926, 0.0486111, 0.0752315, 0.0983796, 0.131944,
+    0.168981,  0.190972,  0.234954,  0.283565,  0.313657,
+    0.380787,  0.413194,  0.446759,  0.491898,  0.525463,
+    0.599537,  0.645833,  0.738426,  0.840278,  0.90625,
+    0.961806,  0.990741,  0.974537,  0.943287,  0.893519,
+    0.861111,  0.805556,  0.77662,   0.721065,  0.678241,
+    0.597222,  0.549769,  0.491898,  0.456019,  0.398148,
+    0.356481,  0.297454,  0.25463,   0.201389,  0.173611,
+    0.136574,  0.0983796, 0.0787037, 0.0648148, 0.0451389,
+    0.03125 
+  };
+
+  G4double Ephoton_rindex_CDET[2] = { 2.40675006*eV, 3.413361452*eV };
+  G4double Rindex_CDET[2]         = { 1.58,          1.58           };
+  G4double AbsLength_CDET[2]      = {3.80*m,         3.80*m         };
+  //G4double AbsLength_CDET[2]      = {1000.*m,         1000.*m         };
+
+  G4MaterialPropertiesTable *Bc408_mt = new G4MaterialPropertiesTable(); 
+  Bc408_mt->AddProperty     ("SCINTILLATIONCOMPONENT1", PhotonEnergy, SCINTILLATION_Bc408, NUMENTRIES);
+  Bc408_mt->AddProperty     ("RINDEX",     Ephoton_rindex_CDET, Rindex_CDET,    2); 
+  Bc408_mt->AddProperty     ("ABSLENGTH",  Ephoton_rindex_CDET, AbsLength_CDET, 2); 
+  Bc408_mt->AddConstProperty("SCINTILLATIONYIELD",10000.0/MeV);
+  //Bc408_mt->AddConstProperty("SCINTILLATIONYIELD",0.64*17400.0/MeV);
+  Bc408_mt->AddConstProperty("SCINTILLATIONTIMECONSTANT1",  2.1*ns);
+  Bc408_mt->AddConstProperty("RESOLUTIONSCALE",   1.0);
+  Bc408_mt->AddConstProperty("SCINTILLATIONYIELD1",1.0);
+
+  G4cout << "==================================================" << G4endl;
+  G4cout << "Bc408 G4MaterialPropertiesTable created" << G4endl;
+  Bc408_mt->DumpTable();
+  G4cout << "==================================================" << G4endl;
+
+  scinti_m->SetMaterialPropertiesTable(Bc408_mt);
+  scinti_m->GetIonisation()->SetBirksConstant(0.1466*mm/MeV);
+}
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+void DetectorConstruction::SetMaterialProperties_LG()
+{
+//======================
+// Lightguides (Ac)
+//======================
+  auto lambda_min = 200*nm ; 
+  auto lambda_max = 700*nm ; 
+
+// Refractive index 
+  const G4int NENTRIES = 11 ;
+  G4double LAMBDA_ACRYLIC[NENTRIES] ;
+  G4double RINDEX_ACRYLIC[NENTRIES] ;
+  G4double ENERGY_ACRYLIC[NENTRIES] ;
+
+// Parameterization for refractive index of High Grade PMMA 
+
+  for(G4int i=0;i<NENTRIES; i++){
+ 
+    LAMBDA_ACRYLIC[NENTRIES-1-i] = lambda_min + i*(lambda_max-lambda_min)/float(NENTRIES-1) ;
+    RINDEX_ACRYLIC[NENTRIES-1-i] = 0.0 ;
+    RINDEX_ACRYLIC[NENTRIES-1-i] = 1.58; 
+    ENERGY_ACRYLIC[NENTRIES-1-i] = h_Planck*c_light/LAMBDA_ACRYLIC[i] ;  // Convert from wavelength to energy ;
+  }
+  
+  G4MaterialPropertiesTable *MPT_Acrylic = new G4MaterialPropertiesTable();
+  MPT_Acrylic->AddProperty("RINDEX", ENERGY_ACRYLIC, RINDEX_ACRYLIC, NENTRIES);
+  G4cout << "==Prop :: 6666666" << G4endl;
+  
+// Absorption
+  const G4int NENT = 30 ;
+  G4double LAMBDAABS[NENT] = 
+  {
+    200., 325., 350., 375., 381., 385.,
+    387., 389., 389., 390., 391., 393.,
+    394., 395., 397., 399., 403., 407.,
+    411., 416., 422., 430., 439., 449.,
+    464., 479., 494., 499., 600., 800.
+  } ;
+
+  G4double ABS[NENT] =   // Transmission (in %) of  19mm thick PMMA 
+                         // Data copied from 
+                         // https://eljentechnology.com/products/light-guides-and-acrylic-plastic
+  { 
+    0.,  0.,  0.,  0.,  1.,  5.,
+   13., 20., 27., 33., 40., 47.,
+   54., 62., 68., 76., 83., 87.,
+   89., 89., 90., 90., 91., 91.,
+   91., 92., 92., 92., 92., 92.
+  } ;
+
+  MPT_Acrylic->AddProperty("ABSLENGTH", new G4MaterialPropertyVector()) ;
+  for(G4int i=0;i<NENT; i++){
+    G4double energy    = h_Planck*c_light/(LAMBDAABS[i]*nm) ;
+    G4double abslength ;
+    if (ABS[i] <= 0.0) {
+      //abslength = 1.0/kInfinity ;
+     abslength = 1000000.*mm;
+    }
+    else {
+     // abslength = -19*mm/(G4Log(ABS[i]/100.0)) ;
+     abslength = 1000000.*mm;
+    }
+    MPT_Acrylic->AddEntry("ABSLENGTH", energy, abslength);
+  }
+  G4cout << "==================================================" << G4endl;
+  G4cout << "Acrylic G4MaterialPropertiesTable created" << G4endl;
+  MPT_Acrylic->DumpTable();
+  G4cout << "==================================================" << G4endl;
+  lg_m->SetMaterialPropertiesTable(MPT_Acrylic);
+}
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+void  DetectorConstruction::SetMaterialProperties_PMT(){
+//======================
+// PMT (quartz)
+//======================
+  const G4int nentries_quartz = 51;
+  G4double Ephoton_quartz[nentries_quartz] = { 
+    1.77120301*eV, 1.796872619*eV, 1.823297216*eV, 1.850510608*eV, 1.878548647*eV, 
+    1.907449396*eV, 1.937253292*eV, 1.968003345*eV, 1.999745334*eV, 2.032528044*eV, 
+    2.066403512*eV, 2.1014273*eV, 2.137658805*eV, 2.175161591*eV, 2.214003763*eV, 
+    2.254258377*eV, 2.296003902*eV, 2.33932473*eV, 2.384311744*eV, 2.431062955*eV, 
+    2.479684214*eV, 2.530290015*eV, 2.58300439*eV, 2.63796193*eV, 2.695308928*eV, 
+    2.755204682*eV, 2.817822971*eV, 2.883353737*eV, 2.952005017*eV, 3.024005139*eV, 
+    3.099605268*eV, 3.179082326*eV, 3.262742387*eV, 3.350924614*eV, 3.444005853*eV, 
+    3.54240602*eV, 3.646594433*eV, 3.757097294*eV, 3.874506585*eV, 3.999490668*eV, 
+    4.132807024*eV, 4.275317611*eV, 4.428007525*eV, 4.592007804*eV, 4.768623489*eV, 
+    4.959368428*eV, 5.16600878*eV, 5.390617857*eV, 5.635645941*eV, 5.904010034*eV, 
+    6.199210536*eV 
+  };
+  //Refractive index data from "Refractiveindex.info"
+  G4double Rindex_quartz[nentries_quartz] = { 
+    1.455292466, 1.455524071, 1.455763571, 1.456011496, 1.456268423, 1.456534974, 1.456811819, 1.457099689, 
+    1.457399374, 1.457711733, 1.458037702, 1.4583783, 1.458734641, 1.459107942, 1.459499536, 1.459910886, 
+    1.460343603, 1.460799458, 1.461280408, 1.461788618, 1.462326487, 1.462896682, 1.463502175, 1.464146283, 
+    1.464832722, 1.465565665, 1.466349815, 1.467190482, 1.46809369, 1.469066293, 1.470116119, 1.471252144, 
+    1.472484709, 1.473825777, 1.475289258, 1.476891413, 1.478651361, 1.48059172, 1.482739429, 1.485126813, 
+    1.487792976, 1.490785646, 1.494163661, 1.498000361, 1.502388312, 1.507446007, 1.513327606, 1.520237459, 
+    1.528452449, 1.53835762, 1.550505538 
+  };  
+
+  const G4int Nabs_quartz = 10;
+  G4double Ephoton_abs_quartz[Nabs_quartz] 
+      = {1.7491*eV,1.8793*eV,2.0012*eV,2.1734*eV,2.2993*eV,2.4195*eV,4.0372*eV,4.8901*eV,6.0646*eV,6.4897*eV};
+  G4double Abslength_quartz[Nabs_quartz] 
+      = {522.51*cm,2666.17*cm,1633.49*cm,756.50*cm,418.96*cm,233.58*cm,23.46*cm,22.58*cm,15.76*cm,14.74*cm};
+
+  auto MPT_temp = new G4MaterialPropertiesTable();
+  MPT_temp->AddProperty("RINDEX",    Ephoton_quartz,     Rindex_quartz,    nentries_quartz);
+  MPT_temp->AddProperty("ABSLENGTH", Ephoton_abs_quartz, Abslength_quartz, Nabs_quartz);
+  G4cout << "==================================================" << G4endl;
+  G4cout << "PMT (Quartz) G4MaterialPropertiesTable created" << G4endl;
+  MPT_temp->DumpTable();
+  G4cout << "==================================================" << G4endl;
+  pmt_m->SetMaterialPropertiesTable( MPT_temp );
+}
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+void DetectorConstruction::SetProperties_Scinti(){
+  if (scinti_type == "cnc"){
+    scinti_X = 2600*mm;
+    scinti_Y = 120*mm;
+    scinti_Z = 5.*mm;  //50*mm;
+  } 
+  else if (scinti_type == "cdh"){
+    scinti_X = 800*mm;
+    scinti_Y = 120*mm;
+    scinti_Z = 3.*mm;  //30*mm;
+  }
+}
+
+void DetectorConstruction::SetProperties_LG(){
+  lg_X = LightGuideLength*mm;
+  lg_Y1 = scinti_Y;
+  lg_Y2 = 30*mm;
+  lg_Z1 = scinti_Z;
+  lg_Z2 = 30*mm;
+}
+
+G4VPhysicalVolume* DetectorConstruction::Construct()
+{
+  // Get nist material manager
+  G4NistManager* nist = G4NistManager::Instance();
+
+  //Material
+  CreateMaterials();
+  SetMaterialProperties_Air  ();
+  SetMaterialProperties_Bc408();
+  SetMaterialProperties_LG   ();
+  SetMaterialProperties_PMT  ();
+
+  // det parameters
+  //
+  //scinchi
+  //G4String scinti_type = "cdh";  //
+  SetProperties_Scinti();
+  //G4Material* scinti_mat = nist->FindOrBuildMaterial("G4_WATER");
+
+  //light guide
+  SetProperties_LG();
+  //G4Material* lg_mat = nist->FindOrBuildMaterial("G4_WATER");
+
+  //pmt
+  G4double pmt_r = 15*mm;
+  G4double pmt_Z = 100*mm;
+  //G4Material* pmt_mat = nist->FindOrBuildMaterial("G4_WATER");
+
+
+  // Option to switch on/off checking of volumes overlaps
+  G4bool checkOverlaps = true;
+
+  //
+  // World
+  //
+  G4double world_sizeXYZ = 1.5*(scinti_X + lg_X);
+  //G4Material* world_mat = nist->FindOrBuildMaterial("G4_AIR");
+
+  G4Box* solidWorld =
+    new G4Box("World",                       //its name
+       0.5*world_sizeXYZ, 0.5*world_sizeXYZ, 0.5*world_sizeXYZ);     //its size
+
+  G4LogicalVolume* logicWorld =
+    new G4LogicalVolume(solidWorld,          //its solid
+                        //air_m,
+                        vacuum,           //its material
+                        "World");            //its name
+
+  fphys_world =
+    new G4PVPlacement(0,                     //no rotation
+                      G4ThreeVector(),       //at (0,0,0)
+                      logicWorld,            //its logical volume
+                      "World",               //its name
+                      0,                     //its mother  volume
+                      false,                 //no boolean operation
+                      0,                     //copy number
+                      checkOverlaps);        //overlaps checking
+  //scintillator
+  G4Box* solid_scinti =
+    new G4Box("scinti",                    //its name
+        0.5*scinti_X, 0.5*scinti_Y, 0.5*scinti_Z); //its size
+
+  G4LogicalVolume* logic_scinti =
+    new G4LogicalVolume(solid_scinti,            //its solid
+                        scinti_m,             //its material
+                        "scinti");         //its name
+
+  fphys_scinti =
+    new G4PVPlacement(0,                       //no rotation
+                    G4ThreeVector(),         //at (0,0,0)
+                    logic_scinti,                //its logical volume
+                    "scinti",              //its name
+                    logicWorld,              //its mother  volume
+                    false,                   //no boolean operation
+                    0,                       //copy number
+                    checkOverlaps);          //overlaps checking */
+
+  //lg
+  G4ThreeVector pos_lg_r = G4ThreeVector((scinti_X + lg_X)/2., 0.*mm, 0.*mm);
+  G4RotationMatrix rotm_lg_r  = G4RotationMatrix();
+  rotm_lg_r.rotateX(M_PI/2.);
+  rotm_lg_r.rotateZ(M_PI/2.);
+  G4Transform3D trans_lg_r = G4Transform3D(rotm_lg_r,pos_lg_r);
+
+  G4ThreeVector pos_lg_l = G4ThreeVector(-1.*(scinti_X + lg_X)/2., 0.*mm, 0.*mm);
+  G4RotationMatrix rotm_lg_l  = G4RotationMatrix();
+  rotm_lg_l.rotateX(M_PI/2.);
+  rotm_lg_l.rotateZ(-1.*M_PI/2.);
+  G4Transform3D trans_lg_l = G4Transform3D(rotm_lg_l,pos_lg_l);
+
+  G4Trd* solid_lg =
+    new G4Trd("lg",                      //its name
+              0.5*lg_Y1, 0.5*lg_Y2,
+              0.5*lg_Z1, 0.5*lg_Z2, 0.5*lg_X); //its size
+
+  G4LogicalVolume* logic_lg =
+    new G4LogicalVolume(solid_lg,         //its solid
+                        lg_m, //scinti_m         //its material
+                        "lg");           //its name
+
+  fphys_lg_r =
+    new G4PVPlacement(trans_lg_r,                       //no rotation                    //at position
+                    logic_lg,             //its logical volume
+                    "lg_r",                //its name
+                    logicWorld,                //its mother  volume
+                    false,                   //no boolean operation
+                    0,                       //copy number
+                    checkOverlaps);          //overlaps checking
+
+  fphys_lg_l =
+    new G4PVPlacement(trans_lg_l,                       //no rotation                    //at position
+                    logic_lg,             //its logical volume
+                    "lg_l",                //its name
+                    logicWorld,                //its mother  volume
+                    false,                   //no boolean operation
+                    1,                       //copy number
+                    checkOverlaps);          //overlaps checking
+
+  //pmt
+  if (optical_switch==0)
+  {
+    G4ThreeVector pos_pmt_r = G4ThreeVector((scinti_X + 2.*lg_X + pmt_Z)/2., 0.*mm, 0.*mm);
+    G4RotationMatrix rotm_pmt_r  = G4RotationMatrix();
+    rotm_pmt_r.rotateX(M_PI/2.);
+    rotm_pmt_r.rotateZ(M_PI/2.);
+    G4Transform3D trans_pmt_r = G4Transform3D(rotm_pmt_r,pos_pmt_r);
+
+    G4ThreeVector pos_pmt_l = G4ThreeVector(-1.*(scinti_X + 2.*lg_X + pmt_Z)/2., 0.*mm, 0.*mm);
+    G4RotationMatrix rotm_pmt_l  = G4RotationMatrix();
+    rotm_pmt_l.rotateX(M_PI/2.);
+    rotm_pmt_l.rotateZ(-1.*M_PI/2.);
+    G4Transform3D trans_pmt_l = G4Transform3D(rotm_pmt_l,pos_pmt_l);
+
+    G4Tubs* solid_pmt =
+      new G4Tubs("pmt",                      //its name
+                0., pmt_r,
+                0.5*pmt_Z, 0., 2.*M_PI); //its size
+
+    G4LogicalVolume* logic_pmt =
+      new G4LogicalVolume(solid_pmt,         //its solid
+                          pmt_m,          //its material
+                          "pmt");           //its name
+
+    fphys_pmt_r =
+      new G4PVPlacement(trans_pmt_r,                       //no rotation
+                      logic_pmt,             //its logical volume
+                      "pmt_r",                //its name
+                      logicWorld,                //its mother  volume
+                      false,                   //no boolean operation
+                      0,                       //copy number
+                      checkOverlaps);
+
+    fphys_pmt_l =
+      new G4PVPlacement(trans_pmt_l,                       //no rotation
+                      logic_pmt,             //its logical volume
+                      "pmt_l",                //its name
+                      logicWorld,                //its mother  volume
+                      false,                   //no boolean operation
+                      0,                       //copy number
+                      checkOverlaps);  
+  }
+  // Set Shape2 as scoring volume
+  //because this is copyed B1, this program break without this command.
+  fScoringVolume = logicWorld;
+
+
+  //G4bool optical = false;
+  if (optical_switch==1)
+  {
+    //=======================================
+    //  Create PM
+    //=======================================
+    //
+    G4OpticalSurface *PhotoDetectorSurface 
+              = new G4OpticalSurface("PhotoDetectorSurface" ,
+                                      glisur, polished, dielectric_metal,1);
+    G4MaterialPropertiesTable *PhotoDetectorPropertyTable = new G4MaterialPropertiesTable();
+      
+    //========================================================================== 
+    // PMT QE read off from Hamamatsu catalogue For R11265U (UBA Photo Cathode)
+    //========================================================================== 
+    //
+    const G4int NPs = 36;
+    G4double photon_lam[NPs] = {   250., 
+              270., 278., 292., 318., 348., 380., 406., 438., 457., 481.,
+              507., 522., 533., 549., 568., 584., 598., 611., 621., 631.,
+              639., 647., 654., 661., 667., 673., 678., 683., 687., 692.,
+              697., 701., 705., 709., 713.};     
+
+    G4double PMT_QE[NPs]     = { 0.00,
+              19.02, 24.82, 33.21, 40.68, 41.20, 40.68, 39.66, 34.50, 30.78, 25.78,
+              22.14, 16.97, 12.84,  9.97,  7.84,  6.16,  4.66,  3.53,  2.64,  1.97,       
+              1.47,  1.09,  0.80,  0.59,  0.44,  0.32,  0.24,  0.17,  0.13,  0.09,       
+              0.07,  0.05,  0.04,  0.03,  0.02 };
+
+    G4double PMT_QE_tmp0[NPs]     = { 0.00,
+              0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,
+              0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,       
+              0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,       
+              0.00,  0.00,  0.00,  0.00,  0.00 };
+
+    G4double PMT_QE_tmp1[NPs]     = { 1.00,
+              1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,
+              1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,       
+              1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,  1.00,       
+              1.00,  1.00,  1.00,  1.00,  1.00 };
+
+    G4double PMT_QE_tmp2[NPs]     = { 0.50,
+              0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,
+              0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,       
+              0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,       
+              0.50,  0.50,  0.50,  0.50,  0.50 };
+
+    G4double Eenergy_En  [NPs];
+    G4double Efficiency  [NPs];
+    G4double Reflectivity[NPs];
+    for (int i=0;i<NPs; i++){
+      Eenergy_En[NPs-1-i]   = h_Planck*c_light/(photon_lam[i]*nm) ;  // Convert from wavelength to energy ;
+      Efficiency[NPs-1-i]   = PMT_QE_tmp1[i]; // 100 % efficiency
+      //Reflectivity[i] = PMT_QE_tmp2[i];       // 
+      //Efficiency[i]   = PMT_QE_tmp[i]/100.;
+      //Reflectivity[NPs-1-i] = PMT_QE[i]/100.;
+      Reflectivity[i] = PMT_QE_tmp1[i]; 
+      G4cout << "################ aaaaaaaaaaa ########## " << Eenergy_En[i] << " " << Reflectivity[i]   << G4endl;
+    }
+
+    PhotoDetectorPropertyTable -> AddProperty("REFLECTIVITY", Eenergy_En, Reflectivity, NPs);
+    PhotoDetectorPropertyTable -> AddProperty("EFFICIENCY",   Eenergy_En, Efficiency,   NPs);
+    PhotoDetectorSurface       -> SetMaterialPropertiesTable(PhotoDetectorPropertyTable);
+
+    //pmt
+    G4ThreeVector pos_pmt_r = G4ThreeVector((scinti_X + 2.*lg_X + pmt_Z)/2., 0.*mm, 0.*mm);
+    G4RotationMatrix rotm_pmt_r  = G4RotationMatrix();
+    rotm_pmt_r.rotateX(M_PI/2.);
+    rotm_pmt_r.rotateZ(M_PI/2.);
+    G4Transform3D trans_pmt_r = G4Transform3D(rotm_pmt_r,pos_pmt_r);
+
+    G4ThreeVector pos_pmt_l = G4ThreeVector(-1.*(scinti_X + 2.*lg_X + pmt_Z)/2., 0.*mm, 0.*mm);
+    G4RotationMatrix rotm_pmt_l  = G4RotationMatrix();
+    rotm_pmt_l.rotateX(M_PI/2.);
+    rotm_pmt_l.rotateZ(-1.*M_PI/2.);
+    G4Transform3D trans_pmt_l = G4Transform3D(rotm_pmt_l,pos_pmt_l);
+
+    G4Tubs* solid_pmt =
+      new G4Tubs("pmt",                      //its name
+                0., pmt_r,
+                0.5*pmt_Z, 0., 2.*M_PI); //its size
+
+    G4LogicalVolume* logic_pmt =
+      new G4LogicalVolume(solid_pmt,         //its solid
+                          pmt_m,          //its material
+                          "pmt");           //its name
+    new G4LogicalSkinSurface("PhotoDetectorSurface",logic_pmt,PhotoDetectorSurface);
+
+    fphys_pmt_r =
+      new G4PVPlacement(trans_pmt_r,                       //no rotation
+                      logic_pmt,             //its logical volume
+                      "pmt_r",                //its name
+                      logicWorld,                //its mother  volume
+                      false,                   //no boolean operation
+                      0,                       //copy number
+                      checkOverlaps);
+
+    fphys_pmt_l =
+      new G4PVPlacement(trans_pmt_l,                       //no rotation
+                      logic_pmt,             //its logical volume
+                      "pmt_l",                //its name
+                      logicWorld,                //its mother  volume
+                      false,                   //no boolean operation
+                      0,                       //copy number
+                      checkOverlaps);
+  
+    // ------------- Surfaces --------------
+    //
+    // Detector Surfaces
+    //
+    G4OpticalSurface* opScintiSurface0 = new G4OpticalSurface("ScintiSurface0");
+    opScintiSurface0->SetType(dielectric_metal);
+    opScintiSurface0->SetFinish(polished);
+    opScintiSurface0->SetModel(unified);
+
+    new G4LogicalBorderSurface("ScintiSurface2",
+                                  fphys_scinti, fphys_world,opScintiSurface0);
+    new G4LogicalBorderSurface("ScintiSurface3",
+                                  fphys_lg_r, fphys_world,opScintiSurface0);
+    new G4LogicalBorderSurface("ScintiSurface4",
+                                  fphys_lg_l, fphys_world,opScintiSurface0);
+
+
+    /* new G4LogicalBorderSurface("ScintiSurface5",
+                                   fphys_lg_r,fphys_pmt_r ,PhotoDetectorSurface);
+    new G4LogicalBorderSurface("ScintiSurface6",
+                                   fphys_lg_l,fphys_pmt_l ,PhotoDetectorSurface); */
+
+    /*
+      G4OpticalSurface* opScintiSurface1 = new G4OpticalSurface("ScintiSurface1");
+      opScintiSurface1->SetType(dielectric_dielectric);
+      opScintiSurface1->SetFinish(polished);
+      opScintiSurface1->SetModel(unified);
+
+      new G4LogicalBorderSurface("ScintiSurface2",
+                                    fDetectorPV,fLightGuideUpPV,opScintiSurface1);
+
+      new G4LogicalBorderSurface("ScintiSurface3",
+                                    fDetectorPV,fLightGuideDnPV,opScintiSurface1);
+
+      new G4LogicalBorderSurface("ScintiSurface4",
+                                    fLightGuideUpPV,fPMTUpPV,opScintiSurface1);
+
+      new G4LogicalBorderSurface("ScintiSurface5",
+                                    fLightGuideDnPV,fPMTDnPV,opScintiSurface1);
+    // Generate & Add Material Properties Table attached to the optical surfaces
+    //
+      const G4int num = 2;
+      G4double ephoton[num] = {2.034*eV, 4.136*eV};
+    //
+      G4double SurfRef1[num]    = {1.0, 1.0};
+      G4MaterialPropertiesTable* myST1 = new G4MaterialPropertiesTable();
+      myST1->AddProperty("REFLECTIVITY",  ephoton, SurfRef1, num);
+      opScintiSurface0->SetMaterialPropertiesTable(myST1);
+    //
+      G4double SurfRef2[num]    = {1.0, 1.0};
+      G4MaterialPropertiesTable* myST2 = new G4MaterialPropertiesTable();
+      myST2->AddProperty("REFLECTIVITY",  ephoton, SurfRef2, num);
+      opScintiSurface1->SetMaterialPropertiesTable(myST2);
+
+    */
+    //========================================================
+    //
+  }
+  return fphys_world;
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+//}

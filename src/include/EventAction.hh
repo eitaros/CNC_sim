@@ -1,0 +1,132 @@
+//
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+//
+/// \file EventAction.hh
+/// \brief Definition of the B1::EventAction class
+
+#ifndef B1EventAction_h
+#define B1EventAction_h 1
+
+#include "G4UserEventAction.hh"
+#include "globals.hh"
+
+//#include "TF1.h"
+//#include "TGraph.h"
+
+#include <vector>
+
+/// Event action class
+///
+
+//namespace B1
+//{
+
+class RunAction;
+
+class EventAction : public G4UserEventAction
+{
+  public:
+    EventAction(RunAction* runAction);
+    ~EventAction() override;
+
+    void BeginOfEventAction(const G4Event* event) override;
+    void EndOfEventAction(const G4Event* event) override;
+
+    void AddEdep(G4double edep) { fEdep += edep; }
+
+    void AddEdepScinti(G4double edep);
+    void SetNScintillation(G4double Nhit);
+    void SetNhitPMT_l();
+    void SetNhitPMT_r();
+    G4double GetNhitPMT_r() {return fNhitPMT_r;}
+    G4double GetNhitPMT_l() {return fNhitPMT_l;}
+    void AppnedTimming_r(G4double t);
+    void AppnedTimming_l(G4double t);
+    void App_Reso_r(G4double t);
+    void App_Reso_l(G4double t);
+    void SetOpticalAnalysis(G4bool b);
+    G4bool GetOpticalAnalysis() {return fOpticalfrag;}
+
+    G4double fNScintillation;
+    G4double fNhitPMT_r;
+    G4double fNhitPMT_l;
+    G4double fEnergyScinti;
+    G4bool fOpticalfrag;
+
+    double AverageTime_r;
+    double AverageTime_l;
+    double SigmaTime_r;
+    double SigmaTime_l;
+    
+    //TGraph   *signal_tamplate;
+    //TGraph   *signal_up;
+    //TGraph   *signal_dn;
+
+    
+    std::vector <G4double> hit_timing_r;
+    std::vector <G4double> hit_timing_l;
+    std::vector <G4double> hit_t_100_r;
+    std::vector <G4double> hit_t_100_l;
+
+  private:
+    RunAction* fRunAction = nullptr;
+    G4double   fEdep = 0.;
+};
+
+inline void EventAction::AddEdepScinti(G4double edep){
+  fEnergyScinti += edep;
+}
+inline void EventAction::SetNScintillation(G4double Nhit){
+  fNScintillation += Nhit;
+}
+inline void EventAction::SetNhitPMT_r(){
+  fNhitPMT_r++;
+}
+inline void EventAction::SetNhitPMT_l(){
+  fNhitPMT_l++;
+}
+inline void EventAction::AppnedTimming_r(G4double t){
+  hit_timing_r.push_back(t);
+}
+inline void EventAction::AppnedTimming_l(G4double t){
+  hit_timing_l.push_back(t);
+}
+inline void EventAction::SetOpticalAnalysis(G4bool b){
+  fOpticalfrag = b;
+}
+inline void EventAction::App_Reso_r(G4double t){
+  hit_t_100_r.push_back(t);
+}
+inline void EventAction::App_Reso_l(G4double t){
+  hit_t_100_l.push_back(t);
+}
+//}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+#endif
+
+

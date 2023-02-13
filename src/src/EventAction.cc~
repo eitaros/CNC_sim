@@ -1,0 +1,115 @@
+//
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+//
+/// \file EventAction.cc
+/// \brief Implementation of the B1::EventAction class
+
+#include "EventAction.hh"
+#include "RunAction.hh"
+
+#include "G4Event.hh"
+#include "G4RunManager.hh"
+
+//#include "TVersionCheck.h"
+
+//namespace B1
+//{
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+EventAction::EventAction(RunAction* runAction)
+: fRunAction(runAction)
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+EventAction::~EventAction()
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void EventAction::BeginOfEventAction(const G4Event*)
+{
+  fEdep = 0.;
+  fNScintillation = 0.;
+  fNhitPMT_r = 0.;
+  fNhitPMT_l = 0.;
+  fEnergyScinti = 0.;
+  AverageTime_r = 0.;
+  AverageTime_l = 0.;
+  SigmaTime_r = 0.;
+  SigmaTime_l = 0.;
+  hit_timing_r.clear();
+  hit_timing_l.clear();
+  hit_t_100_r.clear();
+  hit_t_100_l.clear();
+
+  SetOpticalAnalysis(true);
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void EventAction::EndOfEventAction(const G4Event*)
+{
+  // accumulate statistics in run action
+  //fRunAction->AddEdep(fEdep);
+  //G4cout << "dsjkchsksahskcabc " << fEnergyScinti << G4endl;
+
+  if (fOpticalfrag)
+  { 
+    /* G4cout << "right : " << fNhitPMT_r << G4endl;
+    G4cout << "left : " << fNhitPMT_l << G4endl;
+    G4cout << "edep : " << fEnergyScinti*CLHEP::MeV << " MeV" << G4endl;
+    G4cout << "scintillation : " << fNScintillation << G4endl;
+    G4cout << G4endl; */
+    //G4cout << "right : " << hit_timing_r.begin() << G4endl;
+    //G4cout << "left : " << hit_timing_l.begin() << G4endl;
+
+    fRunAction->Appendpmt_r(fNhitPMT_r);
+    fRunAction->Appendpmt_l(fNhitPMT_l);
+    fRunAction->Appendscintillation(fNScintillation);
+
+    std::sort(hit_timing_r.begin(), hit_timing_r.end());
+    std::sort(hit_timing_l.begin(), hit_timing_l.end());
+    fRunAction->AppendTime_r(hit_timing_r);
+    fRunAction->AppendTime_l(hit_timing_l);
+
+    hit_t_100_r.clear();
+    hit_t_100_l.clear();
+    for (int i = 0; i < 5; i++)
+    {
+      hit_t_100_r.push_back(hit_timing_r.at((i+1)*100));
+      hit_t_100_l.push_back(hit_timing_l.at((i+1)*100));
+    }
+    fRunAction->Marge_reso_r(hit_t_100_r);
+    fRunAction->Marge_reso_l(hit_t_100_l);
+
+  }
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+//}

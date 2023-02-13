@@ -1,0 +1,155 @@
+//
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+//
+/// \file RunAction.hh
+/// \brief Definition of the B1::RunAction class
+
+#ifndef B1RunAction_h
+#define B1RunAction_h 1
+
+#include "G4UserRunAction.hh"
+#include "G4Accumulable.hh"
+#include "globals.hh"
+
+#include <vector>
+
+class G4Run;
+class DetectorConstruction;
+
+/// Run action class
+///
+/// In EndOfRunAction(), it calculates the dose in the selected volume
+/// from the energy deposit accumulated via stepping and event actions.
+/// The computed dose is then printed on the screen.
+
+//namespace B1
+//{
+
+class RunAction : public G4UserRunAction
+{
+  public:
+    RunAction(DetectorConstruction* detectorConstruction);
+    ~RunAction() override;
+
+    void BeginOfRunAction(const G4Run*) override;
+    void   EndOfRunAction(const G4Run*) override;
+
+    void AddEdep (G4double edep);
+
+    void AddEdepSinti(G4double edep);
+    //void AverageEdep(G4double edep);
+    //void SigmaEdep(G4double edep);
+
+    void AppendAverage_r(G4double t);
+    void AppendAverage_l(G4double t);
+    void AppendSigma_r(G4double t);
+    void AppendSigma_l(G4double t);
+    void Appendpmt_r(G4double hit);
+    void Appendpmt_l(G4double hit);
+    void Appendscintillation(G4double hit);
+    void AppendTime_r(std::vector <G4double> time);
+    void AppendTime_l(std::vector <G4double> time);
+    void SetFilename(int l, std::string dettype);
+    void Marge_reso_r(std::vector<G4double> reso);
+    void Marge_reso_l(std::vector<G4double> reso);
+
+    G4double fEdepSinti;
+    G4double fAverageEdep;
+    G4double fSigmaEdep;
+
+    std::string filename_r;
+    std::string filename_l;
+    std::string filename_s;
+    std::string filename_resor;
+    std::string filename_resol;
+    
+    std::vector<G4double> hit_pmt_r;
+    std::vector<G4double> hit_pmt_l;
+    std::vector<G4double> noofscintillation;
+    std::vector<G4double> hit_time_r;
+    std::vector<G4double> hit_time_l;
+
+    std::vector<G4double> Average_Time_r;
+    std::vector<G4double> Average_Time_l;
+    std::vector<G4double> Sigma_Time_r;
+    std::vector<G4double> Sigma_Time_l;
+    
+    std::vector<std::vector<G4double>> hit_res_r;
+    std::vector<std::vector<G4double>> hit_res_l;
+
+  private:
+    G4Accumulable<G4double> fEdep = 0.;
+    G4Accumulable<G4double> fEdep2 = 0.;
+
+    DetectorConstruction* fDetConstruction;
+};
+
+inline void RunAction::AppendAverage_r(G4double t){
+  Average_Time_r.push_back(t);
+}
+inline void RunAction::AppendAverage_l(G4double t){
+  Average_Time_l.push_back(t);
+}
+inline void RunAction::AppendSigma_r(G4double t){
+  Sigma_Time_r.push_back(t);
+}
+inline void RunAction::AppendSigma_l(G4double t){
+  Sigma_Time_l.push_back(t);
+}
+inline void RunAction::AddEdepSinti(G4double edep){
+  fEdepSinti += edep;
+}
+inline void RunAction::Appendpmt_r(G4double hit){
+  hit_pmt_r.push_back(hit);
+}
+inline void RunAction::Appendpmt_l(G4double hit){
+  hit_pmt_l.push_back(hit);
+}
+inline void RunAction::Appendscintillation(G4double hit){
+  noofscintillation.push_back(hit);
+}
+/* inline void RunAction::SigmaEdep(G4double edep){
+  fEdepSinti += edep;
+} */
+inline void RunAction::AppendTime_r(std::vector <G4double> time){
+  //G4cout << "a" << G4endl;
+  hit_time_r.insert(hit_time_r.end(),time.begin(),time.end());
+}
+inline void RunAction::AppendTime_l(std::vector <G4double> time){
+  //G4cout << "a" << G4endl;
+  hit_time_l.insert(hit_time_l.end(),time.begin(),time.end());
+}
+inline void RunAction::Marge_reso_r(std::vector<G4double> reso){
+  hit_res_r.push_back(reso);
+}
+inline void RunAction::Marge_reso_l(std::vector<G4double> reso){
+  hit_res_l.push_back(reso);
+}
+
+
+
+#endif
+

@@ -1,0 +1,184 @@
+//
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+//
+/// \file SteppingAction.cc
+/// \brief Implementation of the B1::SteppingAction class
+
+#include "SteppingAction.hh"
+#include "EventAction.hh"
+#include "DetectorConstruction.hh"
+
+#include "G4Step.hh"
+#include "G4Event.hh"
+#include "G4RunManager.hh"
+#include "G4LogicalVolume.hh"
+
+#include "G4OpticalPhoton.hh"
+#include "G4OpBoundaryProcess.hh"
+#include "G4ProcessManager.hh"
+#include "G4ProcessVector.hh"
+
+//#include "TVersionCheck.h"
+
+//namespace B1
+//{
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+SteppingAction::SteppingAction(EventAction* eventAction, DetectorConstruction* detectorConstruction)
+: fEventAction(eventAction),
+  fDetConstruction(detectorConstruction),
+  G4UserSteppingAction()
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+SteppingAction::~SteppingAction()
+{}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void SteppingAction::UserSteppingAction(const G4Step* step)
+{
+  auto volume     = step->GetPreStepPoint()->GetTouchableHandle()->GetVolume();
+  auto edep       = step->GetTotalEnergyDeposit();
+  //auto stepLength = step->GetStepLength();
+  auto time       = step->GetTrack()->GetGlobalTime();
+  auto charge     = step->GetTrack()->GetDefinition()->GetPDGCharge();
+  auto ParentID   = step->GetTrack()->GetParentID();
+  auto pid        = step->GetTrack()->GetDefinition()->GetPDGEncoding();
+
+  if (time > 1000.*CLHEP::ns) {
+    step->GetTrack() -> SetTrackStatus(fStopAndKill);
+  }
+  G4Track*              theTrack0     = step->GetTrack();
+  G4ParticleDefinition* particleType0 = theTrack0->GetDefinition();
+  if (volume == fDetConstruction->GetWorldPV() && particleType0==G4OpticalPhoton::OpticalPhotonDefinition()) {
+    step->GetTrack() -> SetTrackStatus(fStopAndKill);
+  }
+  if ( volume == fDetConstruction->GetScintiPV() ) {
+    if (//charge != 0.
+        //step->GetTrack()->GetDefinition() != G4OpticalPhoton::OpticalPhotonDefinition()
+        true  
+       ) {
+       fEventAction->AddEdepScinti(step->GetTotalEnergyDeposit());
+//     G4cout << ParentID << " " << pid << " KaonTrig0  " << G4endl;
+    }    
+  }
+
+  if (!fEventAction->GetOpticalAnalysis()) return;
+
+  G4OpBoundaryProcessStatus boundaryStatus           = Undefined;
+  static G4ThreadLocal G4OpBoundaryProcess* boundary = nullptr;
+
+  // find the boundary process only once
+  if(!boundary)
+  {
+    G4ProcessManager* pm =
+      step->GetTrack()->GetDefinition()->GetProcessManager();
+    G4int nprocesses    = pm->GetProcessListLength();
+    G4ProcessVector* pv = pm->GetProcessList();
+    for(G4int i = 0; i < nprocesses; ++i)
+    {
+      if((*pv)[i]->GetProcessName() == "OpBoundary")
+      {
+        boundary = (G4OpBoundaryProcess*) (*pv)[i];
+        break;
+      }
+    }
+  }
+
+  G4Track *fTrack       = step->GetTrack();
+  if(fTrack->GetTrackStatus()!=fAlive) { return; } /// check if it is alive
+
+  // get volume of the current step
+  auto pre_volume = step->GetPreStepPoint() ->GetTouchableHandle()->GetVolume();
+  auto postvolume = step->GetPostStepPoint()->GetTouchableHandle()->GetVolume();
+
+  auto pre_Name = pre_volume -> GetName();
+  auto postName = postvolume -> GetName();
+
+  G4StepPoint*          preStepPoint = step->GetPreStepPoint();
+  G4Track*              theTrack     = step->GetTrack();
+  G4ParticleDefinition* particleType = theTrack->GetDefinition();
+
+  if (particleType==G4OpticalPhoton::OpticalPhotonDefinition()){
+    if (ParentID == 1 && postName == "World" && pre_Name == "World"){
+      theTrack -> SetTrackStatus(fStopAndKill);
+    }
+    if (pre_Name == "scinti" && theTrack->GetCreatorProcess()->GetProcessName() == "Scintillation"){
+      //fEventAction->SetNScintillation();
+    }
+
+    boundaryStatus = boundary->GetStatus();
+    //double reso = 0.27*CLHEP::ns;
+    double reso_factor = 1.0;
+    double reso = reso_factor*0.27*CLHEP::ns;
+    if (pre_Name == "pmt_r") {
+      theTrack -> SetTrackStatus(fStopAndKill);
+      fEventAction->SetNhitPMT_r();
+      //
+      //  include T.T.S of PMT (0.27ns FWHM, for R11265/Hamamatsu )
+      //
+      fEventAction->AppnedTimming_r(preStepPoint->GetGlobalTime()*CLHEP::ns);
+      //fEventAction->AppendTimingUp( G4RandGauss::shoot(preStepPoint->GetGlobalTime()*CLHEP::ns,reso/2.35) );
+      if ((fEventAction->GetNhitPMT_r()) % 100 == 0 && fEventAction->GetNhitPMT_r() < 501) {
+        fEventAction->App_Reso_r(preStepPoint->GetGlobalTime()*CLHEP::ns);
+      }
+    }
+    if (pre_Name == "pmt_l") {
+      theTrack -> SetTrackStatus(fStopAndKill);
+      fEventAction->SetNhitPMT_l();     
+      //
+      //  include T.T.S of PMT (0.27ns FWHM, for R11265/Hamamatsu )
+      //
+      fEventAction->AppnedTimming_l(preStepPoint->GetGlobalTime()*CLHEP::ns);
+      //fEventAction->AppendTimingDn( G4RandGauss::shoot(preStepPoint->GetGlobalTime()*CLHEP::ns,reso/2.35) );
+      if ((fEventAction->GetNhitPMT_l()) % 100 == 0 && fEventAction->GetNhitPMT_l() < 501) {
+        fEventAction->App_Reso_l(preStepPoint->GetGlobalTime()*CLHEP::ns);
+      }
+    }
+  }
+
+
+
+
+  /* // get volume of the current step
+  G4LogicalVolume* volume
+    = step->GetPreStepPoint()->GetTouchableHandle()
+      ->GetVolume()->GetLogicalVolume();
+
+  // check if we are in scoring volume
+  if (volume != fScoringVolume) return;
+
+  // collect energy deposited in this step
+  G4double edepStep = step->GetTotalEnergyDeposit();
+  fEventAction->AddEdep(edepStep); */
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+//}
